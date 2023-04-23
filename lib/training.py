@@ -3,19 +3,19 @@ from typing import List, Union
 
 from lib.debuggable import Debuggable
 from lib.layer import Layer
-from lib.network import Network
+from lib.model import Model
 
 
 class Trainer(Debuggable):
     def __init__(self):
         super().__init__()
 
-    def train(self, network: Network, inputs: List[List[float]], expected_outputs: List[List[float]]):
+    def train(self, model: Model, inputs: List[List[float]], expected_outputs: List[List[float]]):
         raise NotImplementedError
 
     @staticmethod
-    def get_network_error(network: Network, inputs: List[List[float]], expected_outputs: List[List[float]]):
-        return Trainer.get_error(network(inputs), expected_outputs)
+    def get_model_error(model: Model, inputs: List[List[float]], expected_outputs: List[List[float]]):
+        return Trainer.get_error(model(inputs), expected_outputs)
 
     @staticmethod
     def get_error(outputs: List[List[float]], expected_outputs: List[List[float]]):
@@ -40,26 +40,29 @@ class DumbTrainer(Trainer):
         self._generation_size = generation_size
         self._variation_factor = variation_factor
 
-    def train(self, network: Network, inputs: List[List[float]], expected_outputs: List[List[float]]):
-        self._debug_log(f"Training network... generations={self._generations}")
+    def train(self, model: Model, inputs: List[List[float]], expected_outputs: List[List[float]]):
+        self._debug_log(f"Training model... generations={self._generations}")
 
-        best_network = network
+        best_models = [model]
 
         for generation_index in range(self._generations):
-            children_networks = [
-                best_network,
-                *[self._generate_network_variation(best_network) for _ in range(self._generation_size - 1)]
+            variations = self._generate_model_variations(best_models)
+
+            variations_and_errors = [
+                (self.get_model_error(variation, inputs, expected_outputs), variation)
+                for variation in variations
             ]
-            children_networks_and_errors = [
-                (self.get_network_error(network, inputs, expected_outputs), network) for network in children_networks
-            ]
-            children_networks_and_errors = list(sorted(children_networks_and_errors, key=lambda ne: ne[0]))
-            error, best_network = children_networks_and_errors[0]
-            errors = [error for error, _ in children_networks_and_errors]
+            variations_and_errors = list(sorted(variations_and_errors, key=lambda ne: ne[0]))
+            variations_and_errors = variations_and_errors[:2] + variations_and_errors[-1:]
+
+            best_models = [variation for _, variation in variations_and_errors]
+            error, _ = variations_and_errors[0]
+            errors = [error for error, _ in variations_and_errors]
 
             self._debug_log(
-                f"Generation index={generation_index} error={error} " +
-                f"children_errors={self._prepare_value_to_log(errors)}",
+                f"Generation index={generation_index} " +
+                f"variations={len(variations)} " +
+                f"errors={self._prepare_value_to_log(errors)}",
                 end="\r",
                 flush=True
             )
@@ -70,18 +73,30 @@ class DumbTrainer(Trainer):
         self._debug_log("")
         self._debug_log("Training finished")
 
-        return best_network
+        return best_models[0]
 
-    def _generate_network_variation(self, network: Network):
+    def _generate_model_variations(self, models: List[Model]):
+        variations = [*models]
+        model_index = 0
+        while len(variations) < self._generation_size:
+            model = models[model_index]
+            variation = self._generate_model_variation(model)
+            variations.append(variation)
+            model_index = (model_index + 1) % len(models)
+        return variations
+
+    def _generate_model_variation(self, model: Model):
         layers = []
 
-        for layer in network.layers:
+        for layer in model.layers:
             if isinstance(layer, Layer):
-                layer.weights = self._mutate(layer.weights)
-                layer.biases = self._mutate(layer.biases)
-            layers.append(layer)
+                clone = layer.clone(_biases=self._mutate(layer.biases), _weights=self._mutate(layer.weights))
+            else:
+                clone = layer.clone()
 
-        return Network(*layers)
+            layers.append(clone)
+
+        return model.clone(_layers=layers)
 
     def _mutate(self, values: Union[List, float]):
         if isinstance(values, (int, float)):

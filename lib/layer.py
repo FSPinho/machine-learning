@@ -1,57 +1,37 @@
 from copy import deepcopy
 from typing import List
 
+from lib.cloneable import Cloneable
+from lib.debuggable import Debuggable
+from lib.serializable import Serializable
 
-class Layer:
+
+class Layer(Debuggable, Serializable, Cloneable):
     def __init__(self, input_size: int, output_size: int):
+        super().__init__()
+
         self._input_size = input_size
         self._output_size = output_size
 
-        self._weights = [[0.0] * output_size] * input_size
         self._biases = [0.0] * output_size
+        self._weights = [[0.0] * output_size] * input_size
 
     def __call__(self, inputs: List[float]) -> List[float]:
         self._validate_inputs(inputs)
+        self._validate_biases()
+        self._validate_weights()
         return self._calculate_outputs(inputs)
 
     def __str__(self):
         return f"Layer {self._input_size}x{self._output_size} biases={self._biases} weight={self._weights}"
 
     @property
-    def weights(self):
-        return deepcopy(self._weights)
-
-    @weights.setter
-    def weights(self, weights: List[List[float]]):
-        self._validate_weights(weights)
-        self._weights = weights
-
-    @property
     def biases(self):
         return deepcopy(self._biases)
 
-    @biases.setter
-    def biases(self, biases: List[float]):
-        self._validate_biases(biases)
-        self._biases = biases
-
-    def clone(self):
-        clone = Layer(self._input_size, self._output_size)
-        clone.weights = self._weights
-        clone.biases = self._biases
-        return clone
-
-    def _validate_inputs(self, inputs: List[float]):
-        assert len(inputs) == self._input_size, "Given inputs must match the layer input size"
-
-    def _validate_weights(self, weights: List[List[float]]):
-        assert len(weights) == self._input_size, "Given weights must match the layer input size"
-
-        for weights_row in weights:
-            assert len(weights_row) == self._input_size, "Given weights row must match the layer output size"
-
-    def _validate_biases(self, biases: List[float]):
-        assert len(biases) == self._output_size, "Given biases must match the layer output size"
+    @property
+    def weights(self):
+        return deepcopy(self._weights)
 
     def _calculate_outputs(self, inputs: List[float]) -> List[float]:
         outputs = []
@@ -68,3 +48,36 @@ class Layer:
             outputs.append(output_value)
 
         return outputs
+
+    def _validate_inputs(self, inputs: List[float]):
+        assert len(inputs) == self._input_size, "Given inputs must match the layer input size"
+
+    def _validate_biases(self):
+        assert len(self._biases) == self._output_size, "Given biases must match the layer output size"
+
+    def _validate_weights(self):
+        assert len(self._weights) == self._input_size, "Given weights must match the layer input size"
+
+        for weights_row in self._weights:
+            assert len(weights_row) == self._input_size, "Given weights row must match the layer output size"
+
+    def serialize(self) -> dict:
+        return dict(
+            type=Layer.__name__,
+            input_size=self._input_size,
+            output_size=self._output_size,
+            biases=self._biases,
+            weights=self._weights,
+        )
+
+    @staticmethod
+    def deserialize(instance_dict: dict):
+        if instance_dict.get("type") == Layer.__name__:
+            layer = Layer(0, 0)
+            return layer.clone(
+                _input_size=instance_dict.get("input_size"),
+                _output_size=instance_dict.get("output_size"),
+                _biases=instance_dict.get("biases"),
+                _weights=instance_dict.get("weights"),
+            )
+        return None
