@@ -1,19 +1,11 @@
-from json import dumps
-
 from lib.functions import Sigmoid
 from lib.layer import Layer
 from lib.model import Model
 from lib.training import DumbTrainer
-from util.print_table import print_table
+from lib.util.print_table import print_table
 
 
-class ModelXor:
-    @staticmethod
-    def _create_and_train():
-        model = Model.load("model_xor")
-        print(model)
-        print(dumps(model.serialize(), indent=4))
-
+class ModelXOR:
     @staticmethod
     def create_and_train():
         model = Model.load_or_create(Model(

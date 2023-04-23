@@ -1,3 +1,3 @@
-from model_xor.model import ModelXor
+from model_ocr.model import ModelOCR
 
-ModelXor.create_and_train()
+ModelOCR.create_and_train()

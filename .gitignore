@@ -1,2 +1,6 @@
 .idea/
 env/
+datasets/
+
+*.DS_Store
+*.pyc
