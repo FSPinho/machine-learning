@@ -15,7 +15,7 @@ class Layer:
         return self._calculate_outputs(inputs)
 
     def __str__(self):
-        return "Layer {_input_size}x{_output_size}".format(**self.__dict__)
+        return f"Layer {self._input_size}x{self._output_size} biases={self._biases} weight={self._weights}"
 
     @property
     def weights(self):
@@ -24,7 +24,7 @@ class Layer:
     @weights.setter
     def weights(self, weights: List[List[float]]):
         self._validate_weights(weights)
-        self.weights = weights
+        self._weights = weights
 
     @property
     def biases(self):
@@ -33,7 +33,7 @@ class Layer:
     @biases.setter
     def biases(self, biases: List[float]):
         self._validate_biases(biases)
-        self.biases = biases
+        self._biases = biases
 
     def clone(self):
         clone = Layer(self._input_size, self._output_size)

@@ -1,13 +1,14 @@
 from typing import List, Union
 
+from lib.debuggable import Debuggable
 from lib.functions import Activation
 from lib.layer import Layer
 
 
-class Network:
+class Network(Debuggable):
     def __init__(self, *layers: Union[Activation, Layer]):
+        super().__init__()
         self._layers = layers
-        self._debug = False
 
     def __call__(self, inputs: List[List[float]]):
         outputs = []
@@ -39,24 +40,3 @@ class Network:
     def layers(self):
         return [layer.clone() if isinstance(layer, Layer) else layer for layer in self._layers]
 
-    def enable_debug(self):
-        self._debug = True
-
-    def disable_debug(self):
-        self._debug = False
-
-    def _debug_log(self, *args):
-        if self._debug:
-            print("Network Debug:", *self._prepare_value_to_log(args))
-
-    def _prepare_value_to_log(self, value):
-        if isinstance(value, tuple):
-            return map(self._prepare_value_to_log, value)
-
-        if isinstance(value, list):
-            return f"[ {', '.join(map(self._prepare_value_to_log, value))} ]"
-
-        if isinstance(value, (int, float)):
-            return "{value:.2f}".format(value=value)
-
-        return value

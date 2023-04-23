@@ -9,7 +9,6 @@ n = Network(
     Sigmoid(),
     Layer(2, 2),
     Sigmoid(),
-    Layer(2, 2),
 )
 
 inputs = [
@@ -28,7 +27,8 @@ expected_outputs = [
     [0.0, 1.0],
 ]
 
-trainer = DumbTrainer(1, 0.1)
+trainer = DumbTrainer(target_error=0.0001, generations=100000, generation_size=2, variation_factor=0.1)
+trainer.enable_debug()
 n = trainer.train(n, inputs, expected_outputs)
 
 print("Expected")
@@ -40,6 +40,7 @@ print_table(n(inputs))
 print("Error:", DumbTrainer.get_network_error(n, inputs, expected_outputs))
 
 print(n)
+print("Weights")
 
 n.enable_debug()
 n(inputs)
