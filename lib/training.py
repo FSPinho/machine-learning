@@ -27,18 +27,18 @@ class Trainer(Debuggable):
 
 
 class DumbTrainer(Trainer):
-    def __init__(self, target_error: float, generations: int, generation_size: int, variation_factor: float):
+    def __init__(self, target_error: float, generations: int, generation_size: int, variation_factors: List[float]):
         super().__init__()
 
         assert target_error > 0
         assert generations > 0
         assert generation_size > 0
-        assert variation_factor > 0
+        assert len(variation_factors) > 0
 
         self._target_error = target_error
         self._generations = generations
         self._generation_size = generation_size
-        self._variation_factor = variation_factor
+        self._variation_factors = variation_factors
 
     def train(self, model: Model, inputs: List[List[float]], expected_outputs: List[List[float]]):
         self._debug_log(
@@ -56,7 +56,7 @@ class DumbTrainer(Trainer):
                 for variation in variations
             ]
             variations_and_errors = list(sorted(variations_and_errors, key=lambda ne: ne[0]))
-            variations_and_errors = variations_and_errors[:2] + variations_and_errors[-1:]
+            variations_and_errors = variations_and_errors[:2]  # + variations_and_errors[-1:]
 
             best_models = [variation for _, variation in variations_and_errors]
             error, _ = variations_and_errors[0]
@@ -81,22 +81,26 @@ class DumbTrainer(Trainer):
     def _generate_model_variations(self, models: List[Model]):
         variations = [*models]
         model_index = 0
-        multiplier = 1.0
+        factor_index = 0
         while len(variations) < self._generation_size:
             model = models[model_index]
-            variation = self._generate_model_variation(model, multiplier)
+            factor = self._variation_factors[factor_index]
+
+            variation = self._generate_model_variation(model, factor)
             variations.append(variation)
+
             model_index = (model_index + 1) % len(models)
+            factor_index = (factor_index + 1) % len(self._variation_factors)
         return variations
 
-    def _generate_model_variation(self, model: Model, multiplier: float):
+    def _generate_model_variation(self, model: Model, factor: float):
         layers = []
 
         for layer in model.layers:
             if isinstance(layer, Layer):
                 clone = layer.clone(
-                    _biases=self._mutate(layer.biases, multiplier),
-                    _weights=self._mutate(layer.weights, multiplier)
+                    _biases=self._mutate(layer.biases, factor),
+                    _weights=self._mutate(layer.weights, factor)
                 )
             else:
                 clone = layer.clone()
@@ -105,7 +109,7 @@ class DumbTrainer(Trainer):
 
         return model.clone(_layers=layers)
 
-    def _mutate(self, values: Union[List, float], multiplier: float):
+    def _mutate(self, values: Union[List, float], factor: float):
         if isinstance(values, (int, float)):
-            return values + random.uniform(-1.0, 1.0) * self._variation_factor * multiplier
-        return [self._mutate(val, multiplier) for val in values]
+            return values + random.uniform(-1.0, 1.0) * factor
+        return [self._mutate(val, factor) for val in values]

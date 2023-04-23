@@ -1,4 +1,5 @@
 import codecs
+import numpy as np
 from json import loads, dumps, JSONDecodeError
 from os import mkdir
 from os.path import dirname, exists, join
@@ -29,6 +30,7 @@ class Model(Debuggable, Serializable, Cloneable):
             _outputs_row = _inputs_row
             for layer in self._layers:
                 _outputs_row = layer(_outputs_row)
+
             outputs.append(_outputs_row)
 
         self._debug_log(f"")
