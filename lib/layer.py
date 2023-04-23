@@ -16,22 +16,33 @@ class Layer(Debuggable, Serializable, Cloneable):
         self._biases = [0.0] * output_size
         self._weights = [[0.0] * output_size] * input_size
 
-    def __call__(self, inputs: List[float]) -> List[float]:
-        self._validate_inputs(inputs)
         self._validate_biases()
         self._validate_weights()
+
+    def __call__(self, inputs: List[float]) -> List[float]:
+        self._validate_inputs(inputs)
         return self._calculate_outputs(inputs)
 
     def __str__(self):
-        return f"Layer {self._input_size}x{self._output_size} biases={self._biases} weight={self._weights}"
+        return f"Layer {self._input_size}x{self._output_size}"
 
     @property
     def biases(self):
-        return deepcopy(self._biases)
+        return list(self._biases)
 
     @property
     def weights(self):
-        return deepcopy(self._weights)
+        return [list(row) for row in self._weights]
+
+    def clone(self, **kwargs):
+        clone = Layer(self._input_size, self._output_size)
+        clone._biases = self.biases
+        clone._weights = self.weights
+
+        for key, val in kwargs.items():
+            setattr(clone, key, val)
+
+        return clone
 
     def _calculate_outputs(self, inputs: List[float]) -> List[float]:
         outputs = []
@@ -59,7 +70,7 @@ class Layer(Debuggable, Serializable, Cloneable):
         assert len(self._weights) == self._input_size, "Given weights must match the layer input size"
 
         for weights_row in self._weights:
-            assert len(weights_row) == self._input_size, "Given weights row must match the layer output size"
+            assert len(weights_row) == self._output_size, "Given weights row must match the layer output size"
 
     def serialize(self) -> dict:
         return dict(

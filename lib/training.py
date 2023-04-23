@@ -41,7 +41,10 @@ class DumbTrainer(Trainer):
         self._variation_factor = variation_factor
 
     def train(self, model: Model, inputs: List[List[float]], expected_outputs: List[List[float]]):
-        self._debug_log(f"Training model... generations={self._generations}")
+        self._debug_log(
+            f"Training model... generations={self._generations} " +
+            f"error={self._prepare_value_to_log(self.get_model_error(model, inputs, expected_outputs))}"
+        )
 
         best_models = [model]
 
@@ -60,7 +63,7 @@ class DumbTrainer(Trainer):
             errors = [error for error, _ in variations_and_errors]
 
             self._debug_log(
-                f"Generation index={generation_index} " +
+                f"Generation index={generation_index}/{self._generations} " +
                 f"variations={len(variations)} " +
                 f"errors={self._prepare_value_to_log(errors)}",
                 end="\r",
@@ -78,19 +81,23 @@ class DumbTrainer(Trainer):
     def _generate_model_variations(self, models: List[Model]):
         variations = [*models]
         model_index = 0
+        multiplier = 1.0
         while len(variations) < self._generation_size:
             model = models[model_index]
-            variation = self._generate_model_variation(model)
+            variation = self._generate_model_variation(model, multiplier)
             variations.append(variation)
             model_index = (model_index + 1) % len(models)
         return variations
 
-    def _generate_model_variation(self, model: Model):
+    def _generate_model_variation(self, model: Model, multiplier: float):
         layers = []
 
         for layer in model.layers:
             if isinstance(layer, Layer):
-                clone = layer.clone(_biases=self._mutate(layer.biases), _weights=self._mutate(layer.weights))
+                clone = layer.clone(
+                    _biases=self._mutate(layer.biases, multiplier),
+                    _weights=self._mutate(layer.weights, multiplier)
+                )
             else:
                 clone = layer.clone()
 
@@ -98,7 +105,7 @@ class DumbTrainer(Trainer):
 
         return model.clone(_layers=layers)
 
-    def _mutate(self, values: Union[List, float]):
+    def _mutate(self, values: Union[List, float], multiplier: float):
         if isinstance(values, (int, float)):
-            return values + random.uniform(-1.0, 1.0) * self._variation_factor
-        return [self._mutate(val) for val in values]
+            return values + random.uniform(-1.0, 1.0) * self._variation_factor * multiplier
+        return [self._mutate(val, multiplier) for val in values]

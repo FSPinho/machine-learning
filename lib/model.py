@@ -22,18 +22,16 @@ class Model(Debuggable, Serializable, Cloneable):
     def __call__(self, inputs: List[List[float]]):
         outputs = []
 
-        self._debug_log(f"Executing {len(inputs)} input rows...")
-
         for _index, _inputs_row in enumerate(inputs):
-            self._debug_log(f"Executing row {_index}")
-            self._debug_log(f" -  Input:", _inputs_row)
+            if _index % 100 == 0 or _index == len(inputs) - 1:
+                self._debug_log(f"Executing input row {_index}/{len(inputs)}", end="\r", flush=True)
 
-            _outputs_row = [*_inputs_row]
+            _outputs_row = _inputs_row
             for layer in self._layers:
                 _outputs_row = layer(_outputs_row)
-
             outputs.append(_outputs_row)
-            self._debug_log(f" - Output:", _outputs_row)
+
+        self._debug_log(f"")
 
         return outputs
 
@@ -48,6 +46,14 @@ class Model(Debuggable, Serializable, Cloneable):
     @property
     def layers(self):
         return [layer.clone() for layer in self._layers]
+
+    def clone(self, **kwargs):
+        clone = Model(self._key, *[layer.clone() for layer in self._layers])
+
+        for key, val in kwargs.items():
+            setattr(clone, key, val)
+
+        return clone
 
     def serialize(self) -> dict:
         return dict(

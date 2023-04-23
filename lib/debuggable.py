@@ -22,6 +22,6 @@ class Debuggable:
             return f"[ {', '.join(map(self._prepare_value_to_log, value))} ]"
 
         if isinstance(value, (int, float)):
-            return "{value:.4f}".format(value=value)
+            return "{value:.8f}".format(value=value)
 
         return value

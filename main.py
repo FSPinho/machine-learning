@@ -1,3 +1,4 @@
 from model_ocr.model import ModelOCR
 
-ModelOCR.create_and_train()
+for i in range(1):
+    ModelOCR.create_and_train()
