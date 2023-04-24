@@ -5,7 +5,7 @@ from typing import List
 import torch as t
 import torch.nn as nn
 import torch.optim as optim
-from PIL import Image
+from PIL import Image, ImageEnhance
 
 from lib.training import Trainer
 
@@ -16,7 +16,8 @@ DATASET_TESTING_PATH = join(dirname(dirname(__file__)), "datasets/ocr/data/testi
 LETTERS = list("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ")[:10]
 IMAGE_SAMPLE_SIZE = (24, 24)
 INPUT_SIZE = IMAGE_SAMPLE_SIZE[0] * IMAGE_SAMPLE_SIZE[1]
-HIDDEN_1_SIZE = 256
+HIDDEN_1_SIZE = 32
+HIDDEN_2_SIZE = 32
 OUTPUT_SIZE = len(LETTERS)
 
 
@@ -26,15 +27,19 @@ class Model(nn.Module):
 
         self.input_layer = nn.Linear(INPUT_SIZE, HIDDEN_1_SIZE)
         self.input_layer_act = nn.ReLU()
-        self.hidden_layer_1 = nn.Linear(HIDDEN_1_SIZE, OUTPUT_SIZE)
-        self.hidden_layer_1_act = nn.Sigmoid()
+        self.hidden_layer_1 = nn.Linear(HIDDEN_1_SIZE, HIDDEN_2_SIZE)
+        self.hidden_layer_1_act = nn.ReLU()
+        self.hidden_layer_2 = nn.Linear(HIDDEN_2_SIZE, OUTPUT_SIZE)
+        self.hidden_layer_2_act = nn.Sigmoid()
 
     def forward(self, x):
         steps = [
             self.input_layer,
             self.input_layer_act,
             self.hidden_layer_1,
-            self.hidden_layer_1_act
+            self.hidden_layer_1_act,
+            self.hidden_layer_2,
+            self.hidden_layer_2_act
         ]
         for step in steps:
             x = step(x)
@@ -65,17 +70,18 @@ class ModelOCR:
         model = ModelOCR.get_model()
 
         image_path = "/Users/felipepinho/Downloads/ocr_tests/3_1.png"
+        image_path = "/Users/felipepinho/Downloads/ocr_tests/numbers_3.jpeg"
         image = Image.open(image_path)
         w, h = image.size
 
-        scan_sizes = [int(64 * (1 + i * 0.25)) for i in range(0, 40)]
+        scan_sizes = [int(128 * (1 + i * 0.25)) for i in range(0, 40)]
         print(scan_sizes)
 
         findings = []
 
         for size in scan_sizes:
             if size <= w and size <= h:
-                scan_move_step = w / 4
+                scan_move_step = size / 8
                 w_steps = int((w - size) // scan_move_step)
                 h_steps = int((h - size) // scan_move_step)
 
@@ -90,6 +96,8 @@ class ModelOCR:
                             y * scan_move_step + size
                         )
                         tmp_image = image.crop(rect).convert("L")
+                        enhancer = ImageEnhance.Contrast(tmp_image)
+                        tmp_image = enhancer.enhance(1.0)
                         tmp_path = "/tmp/tmp-image.png"
                         tmp_image.save(tmp_path)
                         inputs = t.tensor([ModelOCR._load_image(tmp_path)])
@@ -97,14 +105,14 @@ class ModelOCR:
 
         for inputs, outputs, size in findings:
             letter = ModelOCR._get_letters_from_outputs(outputs)
-            if letter[0][1] > 0.99:
+            if letter[0][1] > 0.99999:
                 print("Recognized letter:", letter, f"{size}x{size}")
                 ModelOCR._print_image_inputs(inputs[0])
 
     @staticmethod
     def show_tests():
         model = ModelOCR.get_model()
-        test_inputs, _ = ModelOCR._get_training_data(DATASET_TESTING_PATH, 5, LETTERS)
+        test_inputs, _ = ModelOCR._get_training_data(DATASET_TESTING_PATH, 20, LETTERS)
 
         for i in range(len(test_inputs)):
             test_inputs_row = test_inputs[i:i + 1]
@@ -234,7 +242,7 @@ class ModelOCR:
         grey_scale = " .:-=+*#%@"
         output_lines = []
         w, h = IMAGE_SAMPLE_SIZE
-        div = 1
+        div = 2
 
         for i in range(h // div):
             line = ""
