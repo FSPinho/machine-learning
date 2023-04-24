@@ -1,30 +1,70 @@
 from os import listdir
-from os.path import dirname, join, isdir
+from os.path import dirname, join, isdir, exists
 from typing import List
 
+import torch as t
+import torch.nn as nn
+import torch.optim as optim
 from PIL import Image
 
-from lib.functions import Sigmoid, ReLU
-from lib.layer import Layer
-from lib.model import Model
-from lib.training import DumbTrainer, Trainer
+from lib.training import Trainer
 
+MODELS_PATH = join(dirname(dirname(__file__)), "trained_models")
 DATASET_TRAINING_PATH = join(dirname(dirname(__file__)), "datasets/ocr/data/training_data")
 DATASET_TESTING_PATH = join(dirname(dirname(__file__)), "datasets/ocr/data/testing_data")
 
-LETTERS = list("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+LETTERS = list("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ")[:10]
 IMAGE_SAMPLE_SIZE = (24, 24)
 INPUT_SIZE = IMAGE_SAMPLE_SIZE[0] * IMAGE_SAMPLE_SIZE[1]
-MIDDLE_SIZE = 16
+HIDDEN_1_SIZE = 256
 OUTPUT_SIZE = len(LETTERS)
+
+
+class Model(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.input_layer = nn.Linear(INPUT_SIZE, HIDDEN_1_SIZE)
+        self.input_layer_act = nn.ReLU()
+        self.hidden_layer_1 = nn.Linear(HIDDEN_1_SIZE, OUTPUT_SIZE)
+        self.hidden_layer_1_act = nn.Sigmoid()
+
+    def forward(self, x):
+        steps = [
+            self.input_layer,
+            self.input_layer_act,
+            self.hidden_layer_1,
+            self.hidden_layer_1_act
+        ]
+        for step in steps:
+            x = step(x)
+        return x
 
 
 class ModelOCR:
     @staticmethod
-    def scan_image():
-        model = Model.load("model_ocr")
+    def get_model():
+        path = ModelOCR.get_persistence_path()
+        model = Model()
+        if exists(path):
+            model.load_state_dict(t.load(path))
+            model.eval()
+            return model
+        return model
 
-        image_path = "/Users/felipepinho/Downloads/ocr_tests/numbers_2.jpeg"
+    @staticmethod
+    def save_model(model):
+        t.save(model.state_dict(), ModelOCR.get_persistence_path())
+
+    @staticmethod
+    def get_persistence_path():
+        return join(MODELS_PATH, f"model_ocr.data")
+
+    @staticmethod
+    def scan_image():
+        model = ModelOCR.get_model()
+
+        image_path = "/Users/felipepinho/Downloads/ocr_tests/3_1.png"
         image = Image.open(image_path)
         w, h = image.size
 
@@ -35,11 +75,11 @@ class ModelOCR:
 
         for size in scan_sizes:
             if size <= w and size <= h:
-                scan_move_step = 8
+                scan_move_step = w / 4
                 w_steps = int((w - size) // scan_move_step)
                 h_steps = int((h - size) // scan_move_step)
 
-                print(size, f"{w_steps}x{h_steps}")
+                print(f"Scanning size={size} step_size={scan_move_step:.4f}")
 
                 for y in range(0, h_steps):
                     for x in range(0, w_steps):
@@ -52,64 +92,69 @@ class ModelOCR:
                         tmp_image = image.crop(rect).convert("L")
                         tmp_path = "/tmp/tmp-image.png"
                         tmp_image.save(tmp_path)
-                        inputs = [ModelOCR._load_image(tmp_path)]
+                        inputs = t.tensor([ModelOCR._load_image(tmp_path)])
                         findings.append((inputs, model(inputs), size))
 
         for inputs, outputs, size in findings:
             letter = ModelOCR._get_letters_from_outputs(outputs)
-            if letter[0][1] > 0.7:
+            if letter[0][1] > 0.99:
                 print("Recognized letter:", letter, f"{size}x{size}")
                 ModelOCR._print_image_inputs(inputs[0])
 
     @staticmethod
     def show_tests():
-        model = Model.load("model_ocr")
-        test_inputs, _ = ModelOCR._get_training_data(DATASET_TESTING_PATH, 5, LETTERS[:11])
+        model = ModelOCR.get_model()
+        test_inputs, _ = ModelOCR._get_training_data(DATASET_TESTING_PATH, 5, LETTERS)
 
-        for test in test_inputs[:20]:
-            print("Recognized letter:", ModelOCR._get_letters_from_outputs(model([test])))
-            ModelOCR._print_image_inputs(test)
+        for i in range(len(test_inputs)):
+            test_inputs_row = test_inputs[i:i + 1]
+            test_outputs_row = model(test_inputs_row)
+            matched_letters = ModelOCR._get_letters_from_outputs(test_outputs_row)
+            print("Recognized letter:", matched_letters)
+            ModelOCR._print_image_inputs(test_inputs_row[0])
 
     @staticmethod
     def create_and_train():
-        letters = LETTERS[:10]
-        # letters_cases = [*[[l] for l in letters], letters]
-        # letters_cases = [*[[l] for l in letters],]
-        letters_cases = [letters]
-        limit = 2
-        target_error = 0.001
+        model = ModelOCR.get_model()
+        inputs, expected_outputs = ModelOCR._get_training_data(DATASET_TRAINING_PATH, 500, LETTERS[:10])
+        test_inputs, test_expected_outputs = ModelOCR._get_training_data(DATASET_TESTING_PATH, 500, LETTERS[:10])
 
-        for ls in letters_cases:
-            print("\nTraining", ls)
+        criterion = nn.CrossEntropyLoss()
+        optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
-            model = Model.load_or_create(Model(
-                "model_ocr",
-                Layer(INPUT_SIZE, MIDDLE_SIZE),
-                ReLU(),
-                Layer(MIDDLE_SIZE, OUTPUT_SIZE),
-                Sigmoid(),
-            ))
-            # model.enable_debug()
+        print(f"Training size={len(inputs)}")
 
-            inputs, expected_outputs = ModelOCR._get_training_data(DATASET_TRAINING_PATH, limit=limit, letters=ls)
-            test_inputs, test_outputs = ModelOCR._get_training_data(DATASET_TESTING_PATH, limit=limit, letters=ls)
+        for epoch in range(10000):
+            inputs, expected_outputs = Trainer.shuffle_data(inputs, expected_outputs)
 
-            initial_error = Trainer.get_model_error(model, inputs, expected_outputs)
-            if initial_error < target_error:
-                continue
+            chunk_size = 10
+            chunks = Trainer.chunkify_data(inputs, expected_outputs, chunk_size)
+            loss = 0.0
+            loss_count = 0.0
 
-            trainer = DumbTrainer(
-                target_error=target_error,
-                generations=1000,
-                generation_size=4,
-                variation_factors=[0.01]
+            for i, (inputs_row, expected_outputs_row) in enumerate(chunks):
+                optimizer.zero_grad()
+                outputs_row = model(inputs_row)
+                loss = criterion(outputs_row, expected_outputs_row)
+                loss.backward()
+                optimizer.step()
+
+                loss += loss.item()
+                loss_count += 1
+
+            if epoch % 100 == 0:
+                ModelOCR.save_model(model)
+
+            error = Trainer.get_model_error(model, inputs, expected_outputs)
+            testing_error = Trainer.get_model_error(model, test_inputs, test_expected_outputs)
+
+            print(
+                f"Epoch={epoch + 1} Loss={loss / loss_count:.8f} Error={error:.8f} TError={testing_error:.8f}",
+                end="\r", flush=True
             )
-            trainer.enable_debug()
-            model = trainer.train(model, inputs, expected_outputs)
 
-            print("Test dataset error:", Trainer.get_model_error(model, test_inputs, test_outputs))
-
-            model.save()
+        print("")
+        print("\nTraining finished.")
 
     @staticmethod
     def _get_letter_expected_output(letter):
@@ -144,7 +189,7 @@ class ModelOCR:
             expected_outputs += [ModelOCR._get_letter_expected_output(letter)] * len(image_paths)
             inputs += list(map(ModelOCR._load_image, image_paths))
 
-        return inputs, expected_outputs
+        return t.tensor(inputs), t.tensor(expected_outputs)
 
     @staticmethod
     def _get_training_paths(path: str, limit: int, letters: List[str]):

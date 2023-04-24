@@ -1,7 +1,10 @@
 import random
 from typing import List, Union
 
+import torch
+
 from lib.debuggable import Debuggable
+from lib.functions import Sigmoid
 from lib.layer import Layer
 from lib.model import Model
 
@@ -20,10 +23,24 @@ class Trainer(Debuggable):
     @staticmethod
     def get_error(outputs: List[List[float]], expected_outputs: List[List[float]]):
         errors = []
+        act = Sigmoid()
         for _outputs, _expected_outputs in zip(outputs, expected_outputs):
-            errors += [pow(_value - _expected_value, 2.0) for _value, _expected_value in
-                       zip(_outputs, _expected_outputs)]
+            errors += [
+                pow(act([_value])[0] - act([_expected_value])[0], 2.0)
+                for _value, _expected_value in zip(_outputs, _expected_outputs)
+            ]
         return sum(errors) / len(errors)
+
+    @staticmethod
+    def shuffle_data(inputs: List[List[float]], expected_outputs: List[List[float]]):
+        shuffled = range(len(inputs))
+        inputs = torch.stack([inputs[i] for i in shuffled])
+        outputs = torch.stack([expected_outputs[i] for i in shuffled])
+        return inputs, outputs
+
+    @staticmethod
+    def chunkify_data(inputs: List[List[float]], expected_outputs: List[List[float]], size: int):
+        return [(inputs[i: i + size], expected_outputs[i: i + size]) for i in range(0, len(inputs), size)]
 
 
 class DumbTrainer(Trainer):
@@ -41,6 +58,9 @@ class DumbTrainer(Trainer):
         self._variation_factors = variation_factors
 
     def train(self, model: Model, inputs: List[List[float]], expected_outputs: List[List[float]]):
+        return self._train(model, inputs, expected_outputs)
+
+    def _train(self, model: Model, inputs: List[List[float]], expected_outputs: List[List[float]]):
         self._debug_log(
             f"Training model... generations={self._generations} " +
             f"error={self._prepare_value_to_log(self.get_model_error(model, inputs, expected_outputs))}"
@@ -49,23 +69,18 @@ class DumbTrainer(Trainer):
         best_models = [model]
 
         for generation_index in range(self._generations):
-            variations = self._generate_model_variations(best_models)
+            inputs, expected_outputs = self.shuffle_data(inputs, expected_outputs)
 
-            variations_and_errors = [
-                (self.get_model_error(variation, inputs, expected_outputs), variation)
-                for variation in variations
-            ]
-            variations_and_errors = list(sorted(variations_and_errors, key=lambda ne: ne[0]))
-            variations_and_errors = variations_and_errors[:2]  # + variations_and_errors[-1:]
+            for inputs_row, outputs_row in self.chunkify_data(inputs, expected_outputs, len(inputs)):
+                model_variations = self._generate_model_variations(best_models)
+                model_variations, errors = self._get_best_model_variations(model_variations, inputs_row, outputs_row)
+                best_models = model_variations[:2] + best_models[:1]
 
-            best_models = [variation for _, variation in variations_and_errors]
-            error, _ = variations_and_errors[0]
-            errors = [error for error, _ in variations_and_errors]
-
+            error = self.get_model_error(best_models[0], inputs, expected_outputs)
             self._debug_log(
                 f"Generation index={generation_index}/{self._generations} " +
-                f"variations={len(variations)} " +
-                f"errors={self._prepare_value_to_log(errors)}",
+                f"variations={self._generation_size} " +
+                f"error={self._prepare_value_to_log(error)}",
                 end="\r",
                 flush=True
             )
@@ -77,6 +92,16 @@ class DumbTrainer(Trainer):
         self._debug_log("Training finished")
 
         return best_models[0]
+
+    def _get_best_model_variations(self, variations: List[Model], inputs: List[List[float]],
+                                   expected_outputs: List[List[float]]):
+        variations_and_errors = [
+            (variation, self.get_model_error(variation, inputs, expected_outputs))
+            for variation in variations
+        ]
+        variations_and_errors = list(sorted(variations_and_errors, key=lambda ne: ne[1]))
+
+        return [variation for variation, _ in variations_and_errors], [error for _, error in variations_and_errors]
 
     def _generate_model_variations(self, models: List[Model]):
         variations = [*models]

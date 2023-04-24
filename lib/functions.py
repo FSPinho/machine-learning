@@ -17,7 +17,7 @@ class Activation(Serializable, Cloneable):
 
     @staticmethod
     def deserialize(instance_dict: dict):
-        _classes = [Sigmoid]
+        _classes = [Sigmoid, ReLU]
         _type = instance_dict.get("type")
 
         for _class in _classes:
@@ -30,3 +30,8 @@ class Activation(Serializable, Cloneable):
 class Sigmoid(Activation):
     def __call__(self, inputs: List[float]):
         return [1.0 / (1 + math.exp(-x)) for x in inputs]
+
+
+class ReLU(Activation):
+    def __call__(self, inputs: List[float]):
+        return [max(0.0, x) for x in inputs]

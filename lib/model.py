@@ -1,5 +1,4 @@
 import codecs
-import numpy as np
 from json import loads, dumps, JSONDecodeError
 from os import mkdir
 from os.path import dirname, exists, join
