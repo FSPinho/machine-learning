@@ -13,15 +13,15 @@ class Trainer(Debuggable):
     def __init__(self):
         super().__init__()
 
-    def train(self, model: Model, inputs: List[List[float]], expected_outputs: List[List[float]]):
+    def train(self, model: Model, inputs, expected_outputs):
         raise NotImplementedError
 
     @staticmethod
-    def get_model_error(model: Model, inputs: List[List[float]], expected_outputs: List[List[float]]):
+    def get_model_error(model: Model, inputs, expected_outputs):
         return Trainer.get_error(model(inputs), expected_outputs)
 
     @staticmethod
-    def get_error(outputs: List[List[float]], expected_outputs: List[List[float]]):
+    def get_error(outputs, expected_outputs):
         errors = []
         act = Sigmoid()
         for _outputs, _expected_outputs in zip(outputs, expected_outputs):
@@ -32,14 +32,14 @@ class Trainer(Debuggable):
         return sum(errors) / len(errors)
 
     @staticmethod
-    def shuffle_data(inputs: List[List[float]], expected_outputs: List[List[float]]):
+    def shuffle_data(inputs, expected_outputs):
         shuffled = range(len(inputs))
         inputs = torch.stack([inputs[i] for i in shuffled])
         outputs = torch.stack([expected_outputs[i] for i in shuffled])
         return inputs, outputs
 
     @staticmethod
-    def chunkify_data(inputs: List[List[float]], expected_outputs: List[List[float]], size: int):
+    def chunkify_data(inputs, expected_outputs, size: int):
         return [(inputs[i: i + size], expected_outputs[i: i + size]) for i in range(0, len(inputs), size)]
 
 
@@ -57,10 +57,10 @@ class DumbTrainer(Trainer):
         self._generation_size = generation_size
         self._variation_factors = variation_factors
 
-    def train(self, model: Model, inputs: List[List[float]], expected_outputs: List[List[float]]):
+    def train(self, model: Model, inputs, expected_outputs):
         return self._train(model, inputs, expected_outputs)
 
-    def _train(self, model: Model, inputs: List[List[float]], expected_outputs: List[List[float]]):
+    def _train(self, model: Model, inputs, expected_outputs):
         self._debug_log(
             f"Training model... generations={self._generations} " +
             f"error={self._prepare_value_to_log(self.get_model_error(model, inputs, expected_outputs))}"
@@ -93,8 +93,8 @@ class DumbTrainer(Trainer):
 
         return best_models[0]
 
-    def _get_best_model_variations(self, variations: List[Model], inputs: List[List[float]],
-                                   expected_outputs: List[List[float]]):
+    def _get_best_model_variations(self, variations: List[Model], inputs,
+                                   expected_outputs):
         variations_and_errors = [
             (variation, self.get_model_error(variation, inputs, expected_outputs))
             for variation in variations

@@ -1,7 +1,6 @@
 import sys
 
-from model_ocr.model_2 import ModelOCR
-from model_xor.model import ModelXOR
+from model_ocr.model import ModelCharTrainer
 
 
 def main():
@@ -10,16 +9,13 @@ def main():
         _model_command = sys.argv[2]
 
         if _model_name == "ocr":
+            model = ModelCharTrainer
             if _model_command == "train":
-                ModelOCR.create_and_train()
+                model.train_char_classifier()
             elif _model_command == "show":
-                ModelOCR.show_tests()
+                model.show_tests()
             elif _model_command == "scan":
-                ModelOCR.scan_image()
-
-        elif _model_name == "xor":
-            if _model_command == "train":
-                ModelXOR.create_and_train()
+                model.scan_image()
 
 
 if __name__ == '__main__':
